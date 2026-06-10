@@ -22,9 +22,24 @@ SANTA mounts this repo as a git submodule at `runners/donner`.
 
 ## Status
 
-Repo created 2026-06-10. Implementation pending.
+Implemented 2026-06-10, `cost: true`. Full board against the committed
+vectors at santa `2f3dbdd`: captured 3/3 (valid + post_digest + cost),
+authored 6/6 — run via `./santa-run <enr-checkout> <vectors-dir> <out-dir>`.
 
-Open: whether donner v1 declares `cost: true` (requires enr's `validation`
-crate to surface block-accumulated cost — currently discarded at
-`validation/src/tx_validation.rs:160`) or ships `cost: false` (contract-legal;
-the cost dimension goes ungraded, not coal).
+Building donner surfaced (and enr fixed, same day): the missing block-level
+maxBlockCost sum check, the missing `exBlockVersion` gate, and a v1-only
+`transactions_root` in enr's mining crate (mined v2+ blocks would have been
+orphaned). It also exposed a sigma-rust round-trip asymmetry — its serializer
+emits `"d": null` for v2 PoW solutions, its deserializer rejects null — which
+the runner normalizes around (`normalize_header_json`; drop when upstream
+fixes).
+
+## Composition
+
+Per-entry: `enr_chain::verify_pow` (hdrPoW) → `ergo_mining::candidate::
+transactions_root` vs header (bsCorrespondsToHeader; the live node gets this
+binding from wire modifier-ids, which the runner bypasses) → fresh
+`DigestValidator::from_state(parent_digest, H-1, checkpoint=0)` +
+`apply_state` (proofs digest, state replay, params incl. version gate) →
+`evaluate_scripts` (verdict + block-accumulated cost). Panic-isolated per
+entry; `expected` never read.

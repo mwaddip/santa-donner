@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# santa-run <impl-path> <vectors-dir> <out-dir>  — Donner (ergo-node-rust, enr digest validation).
+#
+# impl-path ($1) is the ergo-node-rust checkout; the runner crate path-deps
+# enr's validation crate through the enr-impl symlink (the dasher pattern:
+# point the symlink, then build). Build-identity per runner-contract §3:
+# Cargo.toml + Cargo.lock pin the sigma-rust rev and the ergo_avltree_rust
+# fork ([patch.crates-io] replicated here — path-deps don't inherit enr's).
+#
+# Self-provision the toolchain (presence-as-state: runners/donner/mise.toml) —
+# re-exec once under `mise exec` so cargo/rustc are on PATH. The orchestrator
+# stays toolchain-agnostic; `mise` on PATH is the one bootstrap dep; santa-run
+# trusts its own co-located config (see runner-integration.md).
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -z "${SANTA_MISE_ACTIVE:-}" ]; then
+  mise trust "$here/mise.toml" >/dev/null
+  mise --cd "$here" install
+  exec env SANTA_MISE_ACTIVE=1 mise --cd "$here" exec -- "$0" "$@"
+fi
+# --- toolchain (rust) now on PATH ---
+impl="$(cd "$1" && pwd)"
+VECTORS="$(realpath "$2")"
+OUT="$(realpath -m "$3")"; mkdir -p "$OUT"
+ln -sfn "$impl" "$here/enr-impl"
+(cd "$here" && cargo build --release --quiet)
+"$here/target/release/donner-runner" "$VECTORS" "$OUT"

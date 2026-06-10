@@ -1,0 +1,5 @@
+# Donner's toolchain — self-provisioned by santa-run via `mise exec`
+# (presence-as-state: it lives with the runner, so ./conform stays
+# toolchain-agnostic). Pinned to the rustc the runner was built/verified with.
+[tools]
+rust = "1.92.0"
