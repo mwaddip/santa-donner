@@ -167,6 +167,30 @@ fn run_entry(entry: &Value) -> Value {
         Err(e) => return reject(format!("bsCorrespondsToHeader: transactionsRoot: {e}")),
     }
 
+    // Epoch-boundary expectations (JVM exBlockVersion + exMatchParameters).
+    // The tier hands the PRE-STATE in-force table; at a boundary that handed
+    // table IS the trustworthy calculated-params operand — deriving from the
+    // block's own extension would be the trusting-self-declared-data class.
+    // The ≤10 window carries no epoch vote history, so stepped boundaries are
+    // out of v1 scope (the retarget-exclusion class). proposed-update comes
+    // from the block's own extension — JVM-exact (its matchParameters60
+    // compares same-block operands). v6 vectors are testnet: epoch length 128
+    // (JVM TestnetVotingSettings.votingLength; enr chain/src/voting.rs:91 —
+    // not pub-exported, hence the literal).
+    const TESTNET_VOTING_LENGTH: u32 = 128;
+    let (expected_boundary, expected_update) = if input.header.height % TESTNET_VOTING_LENGTH == 0 {
+        let fields = match enr_chain::parse_extension_bytes(&input.ext_section) {
+            Ok((_hid, fields)) => fields,
+            Err(e) => return reject(format!("extension parse: {e}")),
+        };
+        (
+            Some(&input.parameters),
+            Some(enr_chain::extract_disabling_rules_from_kv(&fields)),
+        )
+    } else {
+        (None, None)
+    };
+
     let mut validator =
         DigestValidator::from_state(input.parent_digest, input.header.height - 1, 0);
 
@@ -177,8 +201,8 @@ fn run_entry(entry: &Value) -> Value {
         &input.ext_section,
         &input.preceding_headers,
         &input.parameters,
-        None,
-        None,
+        expected_boundary,
+        expected_update.as_deref(),
     ) {
         Ok(o) => o,
         Err(e) => return reject(e.to_string()),
