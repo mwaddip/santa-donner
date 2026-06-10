@@ -22,6 +22,9 @@ fi
 impl="$(cd "$1" && pwd)"
 VECTORS="$(realpath "$2")"
 OUT="$(realpath -m "$3")"; mkdir -p "$OUT"
-ln -sfn "$impl" "$here/enr-impl"
+# conform clones runner.json's impl (<url>#<ref>) into $1/<repo-basename> and
+# hands the CONTAINING dir as $1 (dasher's $impl/ergots precedent). Direct
+# local runs may pass the enr checkout's parent the same way.
+ln -sfn "$impl/ergo-node-rust" "$here/enr-impl"
 (cd "$here" && cargo build --release --quiet)
 "$here/target/release/donner-runner" "$VECTORS" "$OUT"
