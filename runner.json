@@ -4,5 +4,5 @@
   "version": "v6",
   "tiers": ["block"],
   "cost": true,
-  "impl": "file:///home/mwaddip/projects/santa-donner#main"
+  "impl": "https://github.com/mwaddip/santa-donner#main"
 }
