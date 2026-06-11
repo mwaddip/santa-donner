@@ -14,6 +14,8 @@
 //! `error: "errored"`; a caught panic is `error: "panicked"` + note.
 //! `expected` is never read — the runner decides, SANTA grades.
 
+mod chain_tier;
+
 use std::collections::BTreeMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
@@ -79,22 +81,30 @@ fn main() -> ExitCode {
 fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
     let mut results = BTreeMap::new();
 
-    let entries = match std::fs::read_to_string(path)
+    let (schema, entries) = match std::fs::read_to_string(path)
         .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string()))
     {
-        Ok(v) => match v.get("entries").and_then(Value::as_array) {
-            Some(arr) => arr.clone(),
-            None => {
-                eprintln!("{}: no entries[] — emitting empty actuals", path.display());
-                return results;
+        Ok(v) => {
+            let schema = v
+                .get("schema")
+                .and_then(Value::as_str)
+                .unwrap_or("santa-block/v1")
+                .to_owned();
+            match v.get("entries").and_then(Value::as_array) {
+                Some(arr) => (schema, arr.clone()),
+                None => {
+                    eprintln!("{}: no entries[] — emitting empty actuals", path.display());
+                    return results;
+                }
             }
-        },
+        }
         Err(e) => {
             eprintln!("{}: unreadable vector file: {e}", path.display());
             return results;
         }
     };
+    let is_chain = schema.starts_with("santa-chain/");
 
     for (idx, entry) in entries.iter().enumerate() {
         let name = entry
@@ -106,17 +116,30 @@ fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
         // Per-entry panic boundary: one entry never aborts the file. Rayon
         // (inside evaluate_scripts) resumes worker panics at the join point,
         // so this catches those too.
-        let actuals = catch_unwind(AssertUnwindSafe(|| run_entry(entry)))
+        let actuals = catch_unwind(AssertUnwindSafe(|| {
+            if is_chain {
+                chain_tier::run_chain_entry(entry)
+            } else {
+                run_entry(entry)
+            }
+        }))
             .unwrap_or_else(|payload| {
                 let note = payload
                     .downcast_ref::<String>()
                     .cloned()
                     .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
                     .unwrap_or_else(|| "panic payload not a string".to_string());
-                json!({
-                    "valid": null, "post_digest": null, "cost": null,
-                    "error": "panicked", "note": note,
-                })
+                if is_chain {
+                    json!({
+                        "nbits": null, "parameters": null, "activated_update": null,
+                        "error": "panicked", "note": note,
+                    })
+                } else {
+                    json!({
+                        "valid": null, "post_digest": null, "cost": null,
+                        "error": "panicked", "note": note,
+                    })
+                }
             });
         results.insert(name, actuals);
     }
