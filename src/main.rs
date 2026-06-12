@@ -132,6 +132,7 @@ fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
                 if is_chain {
                     json!({
                         "nbits": null, "parameters": null, "activated_update": null,
+                        "valid": null,
                         "error": "panicked", "note": note,
                     })
                 } else {
@@ -412,6 +413,8 @@ fn parameter_from_id(id: i32) -> Option<Parameter> {
         7 => Parameter::DataInputCost,
         8 => Parameter::OutputCost,
         9 => Parameter::SubblocksPerBlock,
+        121 => Parameter::SoftForkVotesCollected,
+        122 => Parameter::SoftForkStartingHeight,
         123 => Parameter::BlockVersion,
         _ => return None,
     })

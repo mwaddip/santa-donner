@@ -13,8 +13,6 @@
 //! - `voting`: seeded tally over the handed vote stream + the pure boundary
 //!   parameter pipeline; emits the full next table + activated update.
 
-use std::collections::HashMap;
-
 use ergo_chain_types::Header;
 use ergo_lib::chain::parameters::{Parameter, Parameters};
 use serde_json::{json, Value};
@@ -25,6 +23,7 @@ pub fn run_chain_entry(entry: &Value) -> Value {
     match entry.get("kind").and_then(Value::as_str) {
         Some("retargeting") => run_retargeting(entry),
         Some("voting") => run_voting(entry),
+        Some("fork_vote_gate") => run_fork_vote_gate(entry),
         Some(other) => not_implemented(format!("unknown chain kind '{other}'")),
         None => errored("entry has no kind".into()),
     }
@@ -32,12 +31,33 @@ pub fn run_chain_entry(entry: &Value) -> Value {
 
 fn errored(reason: String) -> Value {
     json!({ "nbits": null, "parameters": null, "activated_update": null,
-            "error": "errored", "reason": reason })
+            "valid": null, "error": "errored", "reason": reason })
 }
 
 fn not_implemented(_note: String) -> Value {
     json!({ "nbits": null, "parameters": null, "activated_update": null,
-            "error": "not-implemented" })
+            "valid": null, "error": "not-implemented" })
+}
+
+/// Decode the §5 voting settings block (shared by `voting` and
+/// `fork_vote_gate` — the gate leaves `version2_activation_height`
+/// unread but the block stays uniform).
+fn decode_voting_config(s: &serde_json::Map<String, Value>) -> Option<enr_chain::voting::VotingConfig> {
+    let get_u32 = |k: &str| s.get(k).and_then(Value::as_u64).map(|v| v as u32);
+    match (
+        get_u32("voting_length"),
+        get_u32("soft_fork_epochs"),
+        get_u32("activation_epochs"),
+        get_u32("version2_activation_height"),
+    ) {
+        (Some(vl), Some(sfe), Some(ae), Some(v2)) => Some(enr_chain::voting::VotingConfig {
+            voting_length: vl,
+            soft_fork_epochs: sfe,
+            activation_epochs: ae,
+            version2_activation_height: v2,
+        }),
+        _ => None,
+    }
 }
 
 // ---------------------------------------------------------------- retargeting
@@ -116,20 +136,9 @@ fn run_voting(entry: &Value) -> Value {
         Some(s) => s,
         None => return errored("settings missing".into()),
     };
-    let get_u32 = |k: &str| s.get(k).and_then(Value::as_u64).map(|v| v as u32);
-    let voting = match (
-        get_u32("voting_length"),
-        get_u32("soft_fork_epochs"),
-        get_u32("activation_epochs"),
-        get_u32("version2_activation_height"),
-    ) {
-        (Some(vl), Some(sfe), Some(ae), Some(v2)) => enr_chain::voting::VotingConfig {
-            voting_length: vl,
-            soft_fork_epochs: sfe,
-            activation_epochs: ae,
-            version2_activation_height: v2,
-        },
-        _ => return errored("voting settings incomplete".into()),
+    let voting = match decode_voting_config(s) {
+        Some(v) => v,
+        None => return errored("voting settings incomplete".into()),
     };
 
     let p = match entry.get("payload") {
@@ -205,6 +214,46 @@ fn run_voting(entry: &Value) -> Value {
     }
 }
 
+// ------------------------------------------------------------ fork_vote_gate
+
+/// `fork_vote_gate`: rule 407 / JVM `ErgoStateContext.checkForkVote` over a
+/// handed header (any height — mid-epoch is the point) + active table.
+/// Tri-state per the agreed shapes: gate passes ⇒ valid:true; "Voting for
+/// fork is prohibited" ⇒ valid:false (clean rejection); the eager `.get` on
+/// a 122-without-121 table ⇒ errored envelope.
+fn run_fork_vote_gate(entry: &Value) -> Value {
+    let s = match entry.get("settings").and_then(Value::as_object) {
+        Some(s) => s,
+        None => return errored("settings missing".into()),
+    };
+    let voting = match decode_voting_config(s) {
+        Some(v) => v,
+        None => return errored("voting settings incomplete".into()),
+    };
+
+    let p = match entry.get("payload") {
+        Some(p) => p,
+        None => return errored("payload missing".into()),
+    };
+    let height = match p.get("height").and_then(Value::as_u64) {
+        Some(h) => h as u32,
+        None => return errored("payload.height missing".into()),
+    };
+    let header_votes = match p.get("header_votes").and_then(Value::as_str).map(hex::decode) {
+        Some(Ok(b)) if b.len() == 3 => [b[0], b[1], b[2]],
+        _ => return errored("payload.header_votes malformed".into()),
+    };
+    let current = match decode_table(p.get("current_parameters").and_then(|c| c.get("table"))) {
+        Ok(t) => t,
+        Err(e) => return errored(e),
+    };
+
+    match enr_chain::voting::check_fork_vote(&voting, height, header_votes, &current) {
+        Ok(pass) => json!({ "valid": pass, "error": null }),
+        Err(e) => errored(format!("fork vote gate: {e}")),
+    }
+}
+
 fn decode_table(table: Option<&Value>) -> Result<Parameters, String> {
     let table = table.and_then(Value::as_object).ok_or("current_parameters.table missing")?;
     let mut params = Parameters::default();
@@ -239,6 +288,5 @@ fn parameter_to_id(p: &Parameter) -> Option<i32> {
         Parameter::SoftForkVotesCollected => 121,
         Parameter::SoftForkStartingHeight => 122,
         Parameter::BlockVersion => 123,
-        _ => return None,
     })
 }
