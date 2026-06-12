@@ -22,6 +22,7 @@ pub fn run_chain_entry(entry: &Value) -> Value {
         Some("retargeting") => run_retargeting(entry),
         Some("voting") => run_voting(entry),
         Some("fork_vote_gate") => run_fork_vote_gate(entry),
+        Some("header_votes") => run_header_votes(entry),
         Some(other) => not_implemented(format!("unknown chain kind '{other}'")),
         None => errored("entry has no kind".into()),
     }
@@ -256,6 +257,25 @@ fn run_fork_vote_gate(entry: &Value) -> Value {
         Ok(pass) => json!({ "valid": pass, "error": null }),
         Err(e) => errored(format!("fork vote gate: {e}")),
     }
+}
+
+// ------------------------------------------------------------- header_votes
+
+/// `header_votes`: JVM `validateVotes` rules 212/213/214 over a header's
+/// three vote bytes. Two-outcome — the seam never throws (pure byte checks,
+/// no table reads), so there is no errored arm. The settings block is
+/// present-but-unread (uniform corpus shape; the seam takes only the bytes).
+fn run_header_votes(entry: &Value) -> Value {
+    let p = match entry.get("payload") {
+        Some(p) => p,
+        None => return errored("payload missing".into()),
+    };
+    let votes = match p.get("votes").and_then(Value::as_str).map(hex::decode) {
+        Some(Ok(b)) if b.len() == 3 => [b[0], b[1], b[2]],
+        _ => return errored("payload.votes malformed".into()),
+    };
+    // Ok → valid:true, Err (any rule) → valid:false. No errored arm.
+    json!({ "valid": enr_chain::voting::check_header_votes(votes).is_ok(), "error": null })
 }
 
 fn decode_table(table: Option<&Value>) -> Result<Parameters, String> {
