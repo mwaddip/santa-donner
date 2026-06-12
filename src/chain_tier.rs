@@ -194,6 +194,15 @@ fn run_voting(entry: &Value) -> Value {
         &proposed_update,
     ) {
         Ok((params, activated)) => {
+            // The seam returns the parsed VALUE (JVM object parity); the
+            // wire form is its canonical re-serialization — fallible
+            // (ReplacedRule(0)-class offsets cannot encode, JVM putUShort
+            // require parity).
+            let encoded =
+                match enr_chain::voting::encode_validation_settings_update(&activated) {
+                    Ok(bytes) => bytes,
+                    Err(e) => return errored(format!("activated update encode: {e}")),
+                };
             let table: std::collections::BTreeMap<String, i32> = params
                 .parameters_table
                 .iter()
@@ -201,7 +210,7 @@ fn run_voting(entry: &Value) -> Value {
                 .collect();
             json!({
                 "parameters": { "table": table },
-                "activated_update": hex::encode(activated),
+                "activated_update": hex::encode(encoded),
                 "error": null,
             })
         }
