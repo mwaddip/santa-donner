@@ -268,17 +268,6 @@ struct EntryInput {
 /// `None` correctly. The committed vectors carry the emitted `null` (they came
 /// from this serializer via the node API), hence this normalization. Remove
 /// when the upstream fix lands.
-fn normalize_header_json(header: &mut Value) {
-    if let Some(d) = header
-        .get_mut("powSolutions")
-        .and_then(|ps| ps.as_object_mut())
-    {
-        if d.get("d").is_some_and(Value::is_null) {
-            d.remove("d");
-        }
-    }
-}
-
 fn decode_entry(entry: &Value) -> Result<EntryInput, String> {
     let parent_digest = {
         let hex_str = entry
@@ -298,7 +287,6 @@ fn decode_entry(entry: &Value) -> Result<EntryInput, String> {
             .and_then(|b| b.get("header"))
             .cloned()
             .ok_or("block.header missing")?;
-        normalize_header_json(&mut h);
         serde_json::from_value(h).map_err(|e| format!("block.header decode: {e}"))?
     };
 
@@ -307,10 +295,7 @@ fn decode_entry(entry: &Value) -> Result<EntryInput, String> {
     }
 
     let preceding_headers: Vec<Header> = {
-        let mut hs = entry.get("headers").cloned().ok_or("headers missing")?;
-        if let Some(arr) = hs.as_array_mut() {
-            arr.iter_mut().for_each(normalize_header_json);
-        }
+        let hs = entry.get("headers").cloned().ok_or("headers missing")?;
         serde_json::from_value(hs).map_err(|e| format!("headers decode: {e}"))?
     };
     if preceding_headers.is_empty() {

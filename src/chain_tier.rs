@@ -17,8 +17,6 @@ use ergo_chain_types::Header;
 use ergo_lib::chain::parameters::{Parameter, Parameters};
 use serde_json::{json, Value};
 
-use crate::normalize_header_json;
-
 pub fn run_chain_entry(entry: &Value) -> Value {
     match entry.get("kind").and_then(Value::as_str) {
         Some("retargeting") => run_retargeting(entry),
@@ -87,13 +85,10 @@ fn run_retargeting(entry: &Value) -> Value {
     };
 
     let headers: Vec<Header> = {
-        let mut hs = match entry.get("payload").and_then(|p| p.get("anchor_headers")) {
+        let hs = match entry.get("payload").and_then(|p| p.get("anchor_headers")) {
             Some(h) => h.clone(),
             None => return errored("payload.anchor_headers missing".into()),
         };
-        if let Some(arr) = hs.as_array_mut() {
-            arr.iter_mut().for_each(normalize_header_json);
-        }
         match serde_json::from_value(hs) {
             Ok(v) => v,
             Err(e) => return errored(format!("anchor_headers decode: {e}")),
