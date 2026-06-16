@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 # enr's validation crate via the santa-run-managed symlink (dasher pattern):
 # santa-run receives <impl-path> and points enr-impl at it before building.
-ergo-validation = { path = "enr-impl/validation" }
+ergo-validation = { path = "enr-impl/validation", features = ["json"] }
 # Header-tier + section-binding checks the node performs OUTSIDE validation/
 # (chain validates headers before blocks; the wire's modifier-id binding
 # checks section↔header correspondence at download). Donner replays both
@@ -21,12 +21,14 @@ ergo-validation = { path = "enr-impl/validation" }
 enr-chain = { path = "enr-impl/chain" }
 ergo-mining = { path = "enr-impl/mining" }
 
-# MUST match enr's pins exactly (validation/Cargo.toml) so Header/Transaction/
-# Parameters types unify across the path-dep boundary. Build-identity per
-# runner-contract §3: donner's conformance subject = enr validation + this
-# sigma-rust rev + the avltree fork pin below.
-ergo-lib = { git = "https://github.com/mwaddip/sigma-rust.git", rev = "159d1473", features = ["json"] }
-ergo-chain-types = { git = "https://github.com/mwaddip/sigma-rust.git", rev = "159d1473", features = ["json"] }
+# NO direct sigma-rust dep — donner uses ENR's RE-EXPORTS (enr_chain::{Header, ADDigest,
+# BlockId}, ergo_validation::{Parameters, Parameter, Transaction, ErgoBox, ErgoStateContext}),
+# so there is exactly ONE sigma-rust version — enr's, via the path-deps above — and NO rev for
+# the runner to pin and drift on as enr advances (the prior `git+rev` here broke the build when
+# enr moved). ergo-validation's `json` feature (below) gives the re-exported Header/Transaction
+# their Deserialize impls; feature-unification onto ergo-chain-types/json carries it to
+# enr_chain::Header too. The conformance subject is enr's code at runner.json's `#main` — exactly
+# what it pins.
 
 serde_json = "1"
 hex = "0.4"

@@ -21,12 +21,10 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::process::ExitCode;
 
-use ergo_chain_types::{ADDigest, Header};
-use ergo_lib::chain::parameters::{Parameter, Parameters};
-use ergo_lib::chain::transaction::Transaction;
+use enr_chain::{ADDigest, Header};
 use ergo_validation::{
     evaluate_scripts, serialize_ad_proofs, serialize_block_transactions, serialize_extension,
-    BlockValidator, DigestValidator,
+    BlockValidator, DigestValidator, Parameter, Parameters, Transaction,
 };
 use serde_json::{json, Value};
 

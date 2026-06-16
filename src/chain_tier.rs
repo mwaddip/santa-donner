@@ -13,8 +13,8 @@
 //! - `voting`: seeded tally over the handed vote stream + the pure boundary
 //!   parameter pipeline; emits the full next table + activated update.
 
-use ergo_chain_types::Header;
-use ergo_lib::chain::parameters::{Parameter, Parameters};
+use enr_chain::Header;
+use ergo_validation::{Parameter, Parameters};
 use serde_json::{json, Value};
 
 pub fn run_chain_entry(entry: &Value) -> Value {
