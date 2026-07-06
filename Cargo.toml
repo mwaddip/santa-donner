@@ -21,6 +21,12 @@ ergo-validation = { path = "enr-impl/validation", features = ["json"] }
 enr-chain = { path = "enr-impl/chain" }
 ergo-mining = { path = "enr-impl/mining" }
 
+# For the dump-avl-tree binary (reads state.redb directly)
+enr-state = { path = "enr-impl/state" }
+ergo_avltree_rust = "0.1.1"
+redb = "4"
+bytes = "1"
+
 # NO direct sigma-rust dep — donner uses ENR's RE-EXPORTS (enr_chain::{Header, ADDigest,
 # BlockId}, ergo_validation::{Parameters, Parameter, Transaction, ErgoBox, ErgoStateContext}),
 # so there is exactly ONE sigma-rust version — enr's, via the path-deps above — and NO rev for
@@ -38,6 +44,12 @@ hex = "0.4"
 # blitzen-eni (crates.io avltree verifier panics on degenerate proofs).
 [patch.crates-io]
 ergo_avltree_rust = { git = "https://github.com/mwaddip/ergo_avltree_rust.git", rev = "2fc88d83" }
+
+# ── dump-avl-tree binary ──────────────────────────────────────────────────
+[[bin]]
+name = "dump-avl-tree"
+path = "src/bin/dump_avl_tree.rs"
+required-features = []
 
 [profile.release]
 debug = false

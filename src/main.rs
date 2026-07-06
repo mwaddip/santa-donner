@@ -219,7 +219,7 @@ fn run_entry(entry: &Value) -> Value {
     let outcome = match validator.apply_state(
         &input.header,
         &input.txs_section,
-        Some(&input.proofs_section),
+        input.proofs_section.as_deref(),
         &input.ext_section,
         &input.preceding_headers,
         &input.parameters,
@@ -252,7 +252,7 @@ struct EntryInput {
     parameters: Parameters,
     transactions: Vec<Transaction>,
     txs_section: Vec<u8>,
-    proofs_section: Vec<u8>,
+    proofs_section: Option<Vec<u8>>,
     ext_section: Vec<u8>,
 }
 
@@ -317,15 +317,17 @@ fn decode_entry(entry: &Value) -> Result<EntryInput, String> {
         serialize_block_transactions(&header_id, header.version as u32, &transactions)
             .map_err(|e| format!("blockTransactions serialize: {e}"))?;
 
-    let proof_bytes = hex::decode(
-        block
-            .get("adProofs")
-            .and_then(|p| p.get("proofBytes"))
-            .and_then(Value::as_str)
-            .ok_or("block.adProofs.proofBytes missing")?,
-    )
-    .map_err(|e| format!("proofBytes hex: {e}"))?;
-    let proofs_section = serialize_ad_proofs(&header_id, &proof_bytes);
+    // proofBytes: null or absent means proofless block (consensus reject).
+    let proof_bytes_opt: Option<Vec<u8>> =
+        match block.get("adProofs").and_then(|p| p.get("proofBytes")) {
+            Some(Value::String(s)) if !s.is_empty() => Some(
+                hex::decode(s).map_err(|e| format!("proofBytes hex: {e}"))?,
+            ),
+            _ => None,
+        };
+    let proofs_section = proof_bytes_opt
+        .as_deref()
+        .map(|pb| serialize_ad_proofs(&header_id, pb));
 
     let fields_json = block
         .get("extension")
