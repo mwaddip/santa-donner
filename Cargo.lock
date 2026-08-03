@@ -383,10 +383,14 @@ dependencies = [
 name = "donner-runner"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "enr-chain",
+ "enr-state",
  "ergo-mining",
  "ergo-validation",
+ "ergo_avltree_rust",
  "hex",
+ "redb",
  "serde_json",
 ]
 
@@ -463,7 +467,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 [[package]]
 name = "ergo-chain-types"
 version = "0.15.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "base16",
  "base64",
@@ -486,7 +490,7 @@ dependencies = [
 [[package]]
 name = "ergo-lib"
 version = "0.28.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "base16",
  "bounded-vec",
@@ -516,7 +520,7 @@ dependencies = [
 [[package]]
 name = "ergo-merkle-tree"
 version = "0.15.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "base16",
  "blake2",
@@ -551,7 +555,7 @@ dependencies = [
 [[package]]
 name = "ergo-nipopow"
 version = "0.15.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "base16",
  "bounded-integer",
@@ -588,7 +592,7 @@ dependencies = [
 [[package]]
 name = "ergo_avltree_rust"
 version = "0.1.1"
-source = "git+https://github.com/mwaddip/ergo_avltree_rust.git?rev=2fc88d83#2fc88d8356fb6dbd453277c54cbaea07eef0d667"
+source = "git+https://github.com/mwaddip/ergo_avltree_rust.git?branch=main#d18773c26ab54ddf159a0042a5389b6fd5a76064"
 dependencies = [
  "anyhow",
  "base16",
@@ -602,7 +606,7 @@ dependencies = [
 [[package]]
 name = "ergotree-interpreter"
 version = "0.28.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "base16",
  "blake2",
@@ -635,7 +639,7 @@ dependencies = [
 [[package]]
 name = "ergotree-ir"
 version = "0.28.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "base16",
  "bnum",
@@ -732,7 +736,7 @@ dependencies = [
 [[package]]
 name = "gf2_192"
 version = "0.28.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "derive_more",
  "thiserror",
@@ -1240,8 +1244,6 @@ dependencies = [
 [[package]]
 name = "redb"
 version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67f7f231ea7b1172b7ac00ccf96b1250f0fb5a16d5585836aa4ebc997df7cbde"
 dependencies = [
  "libc",
 ]
@@ -1412,7 +1414,7 @@ dependencies = [
 [[package]]
 name = "sigma-ser"
 version = "0.19.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "bitvec",
  "bounded-vec",
@@ -1423,7 +1425,7 @@ dependencies = [
 [[package]]
 name = "sigma-util"
 version = "0.18.0"
-source = "git+https://github.com/mwaddip/sigma-rust.git?rev=10a77c5c#10a77c5c4a7bb9b5991f5d07d556dcb8fd5b38bb"
+source = "git+https://github.com/mwaddip/sigma-rust.git?rev=f76db922#f76db9221fe558320d8d0f509a5532b8917542c6"
 dependencies = [
  "blake2",
  "sha2 0.10.9",

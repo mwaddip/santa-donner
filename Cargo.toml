@@ -40,10 +40,32 @@ serde_json = "1"
 hex = "0.4"
 
 # Replicated from enr's workspace root: [patch] applies at the consuming build
-# root only — a path-dep does NOT inherit enr's patch table. Same story as
-# blitzen-eni (crates.io avltree verifier panics on degenerate proofs).
+# root ONLY — a path-dep does NOT inherit enr's patch table, so donner's table
+# governs enr's own crates in this build. Every entry in enr's root
+# [patch.crates-io] must therefore be restated here, or the crate silently
+# resolves to crates.io instead of what enr actually ships.
+#
+# Same lockstep hazard the sigma-rust comment above documents, and it has now
+# bitten twice:
+#   · ergo_avltree_rust — was pinned `rev = "2fc88d83"` and drifted 16 commits
+#     behind enr. Now tracks `branch = "main"`, so it can never sit BEHIND enr
+#     again. This asymmetry is deliberate and agreed with the ergo-node-rust
+#     session (reply-santa-avltree-pinning-asymmetry.md): donner floats, the
+#     NODE keeps pinning by rev because it ships release binaries whose exact
+#     avltree commit must be readable from the manifest. Do not "fix" the node
+#     to match donner.
+#   · redb — enr vendors a MODIFIED redb (`set_read_cache_limit` /
+#     `clear_read_cache` on Database, used by enr-state/src/storage.rs). Added
+#     to enr's table 2026-07-29 (5c5c76c, v0.7.7); donner never restated it and
+#     resolved stock crates.io redb 4.0.0 instead, which lacks those methods —
+#     enr-state failed to compile through donner's workspace for three weeks
+#     while building clean standalone.
+#
+# Both entries reach enr through the santa-run-managed `enr-impl` symlink, so
+# they follow whatever enr is STAGED rather than naming a version by hand.
 [patch.crates-io]
-ergo_avltree_rust = { git = "https://github.com/mwaddip/ergo_avltree_rust.git", rev = "2fc88d83" }
+ergo_avltree_rust = { git = "https://github.com/mwaddip/ergo_avltree_rust.git", branch = "main" }
+redb = { path = "enr-impl/patches/redb" }
 
 # ── dump-avl-tree binary ──────────────────────────────────────────────────
 [[bin]]
