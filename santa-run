@@ -3,9 +3,16 @@
 #
 # impl-path ($1) is the ergo-node-rust checkout; the runner crate path-deps
 # enr's validation crate through the enr-impl symlink (the dasher pattern:
-# point the symlink, then build). Build-identity per runner-contract §3:
-# Cargo.toml + Cargo.lock pin the sigma-rust rev and the ergo_avltree_rust
-# fork ([patch.crates-io] replicated here — path-deps don't inherit enr's).
+# point the symlink, then build).
+#
+# Build-identity per runner-contract §3: Cargo.lock pins the resolved graph, and
+# the [patch.crates-io] table is DERIVED from the staged enr's own manifest at
+# stage time (see derive_patch_table below) rather than hand-restated here. That
+# derivation is the single source of truth — agreed with the ergo-node-rust
+# session, 2026-08-04 — so donner grades enr built against exactly the dependency
+# closure enr declares, and a green cell is reproducible by checking out that enr
+# commit. The committed table below the markers is a SNAPSHOT so a direct
+# `cargo build` still works; santa-run overwrites it from the staged enr.
 #
 # Self-provision the toolchain (presence-as-state: runners/donner/mise.toml) —
 # re-exec once under `mise exec` so cargo/rustc are on PATH. The orchestrator
@@ -26,5 +33,79 @@ OUT="$(realpath -m "$3")"; mkdir -p "$OUT"
 # hands the CONTAINING dir as $1 (dasher's $impl/ergots precedent). Direct
 # local runs may pass the enr checkout's parent the same way.
 ln -sfn "$impl/ergo-node-rust" "$here/enr-impl"
+
+# ── derive [patch.crates-io] from the STAGED enr, verbatim ────────────────────
+#
+# Cargo honours [patch] only from the consuming workspace root. enr arrives as
+# path-deps, so ITS table is ignored and donner's governs enr's own crates —
+# every entry must therefore be restated here. Hand-restating failed twice:
+# ergo_avltree_rust drifted 16 commits behind by rev, and `redb` was never
+# restated at all, resolving to crates.io for three weeks while enr-state failed
+# to compile through donner but built clean standalone.
+#
+# The failure mode that matters is not a wrong version — it is an entry nobody
+# knew existed, failing quietly enough to look like success. So this derivation
+# FAILS THE RUN on anything it cannot resolve; it never silently omits an entry.
+derive_patch_table() {
+  local manifest="$here/enr-impl/Cargo.toml" out="$here/Cargo.toml"
+  [ -f "$manifest" ] || {
+    echo "santa-run: staged enr has no Cargo.toml at $manifest" >&2; exit 1; }
+
+  # Entry lines of enr's [patch.crates-io], verbatim, stopping at the next table.
+  local -a entries
+  mapfile -t entries < <(awk '
+    /^[[:space:]]*\[patch\.crates-io\][[:space:]]*$/ { inblock = 1; next }
+    inblock && /^[[:space:]]*\[/                     { inblock = 0 }
+    inblock && /^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*=/ { print }
+  ' "$manifest")
+
+  (( ${#entries[@]} > 0 )) || {
+    echo "santa-run: staged enr declares no [patch.crates-io] entries — refusing to build." >&2
+    echo "  If enr genuinely dropped its patch table, remove this derivation deliberately;" >&2
+    echo "  an empty table silently resolves every patched crate to crates.io." >&2
+    exit 1; }
+
+  # Rewrite enr-relative paths to reach through the symlink, and REFUSE anything
+  # that does not resolve — a dangling path is exactly the quiet-skip case.
+  local -a rewritten=()
+  local line target
+  for line in "${entries[@]}"; do
+    if [[ "$line" =~ path[[:space:]]*=[[:space:]]*\"([^\"]+)\" ]]; then
+      target="${BASH_REMATCH[1]}"
+      [ -e "$here/enr-impl/$target" ] || {
+        echo "santa-run: enr patch entry points at '$target', which does not exist under the" >&2
+        echo "  staged enr. Refusing to build rather than dropping the entry:" >&2
+        echo "    $line" >&2
+        exit 1; }
+      line="${line//path = \"$target\"/path = \"enr-impl/$target\"}"
+      line="${line//path=\"$target\"/path = \"enr-impl/$target\"}"
+    fi
+    rewritten+=("$line")
+  done
+
+  # Count-in == count-out. This is the guard that would have caught the redb
+  # omission: a derivation that drops an entry must fail, not build.
+  (( ${#rewritten[@]} == ${#entries[@]} )) || {
+    echo "santa-run: derived ${#rewritten[@]} patch entries from ${#entries[@]} — entries were" >&2
+    echo "  lost in rewriting. Refusing to build." >&2
+    exit 1; }
+
+  # Splice between the markers, leaving the rest of the manifest untouched.
+  local tmp; tmp="$(mktemp)"
+  awk -v block="$(printf '%s\n' "${rewritten[@]}")" '
+    /^# >>> DERIVED-PATCH-TABLE >>>$/ { print; print "[patch.crates-io]"; print block; skip = 1; next }
+    /^# <<< DERIVED-PATCH-TABLE <<<$/ { skip = 0 }
+    !skip { print }
+  ' "$out" > "$tmp"
+
+  grep -q '^# >>> DERIVED-PATCH-TABLE >>>$' "$tmp" || {
+    echo "santa-run: Cargo.toml lost its DERIVED-PATCH-TABLE markers — refusing to build." >&2
+    exit 1; }
+  mv "$tmp" "$out"
+  echo "santa-run: derived ${#rewritten[@]} [patch.crates-io] entries from staged enr" >&2
+  printf '  %s\n' "${rewritten[@]}" >&2
+}
+derive_patch_table
+
 (cd "$here" && cargo build --release --quiet)
 "$here/target/release/donner-runner" "$VECTORS" "$OUT"
