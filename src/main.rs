@@ -231,7 +231,7 @@ fn run_entry(entry: &Value) -> Value {
     // caller to run — the bundle "never leaves the stack frame that built it".
     // So an Ok here already means the scripts passed; the reject arm below is
     // the only verdict branch left.
-    if let Err(e) = validator.apply_state(
+    let outcome = match validator.apply_state(
         &input.header,
         &input.txs_section,
         input.proofs_section.as_deref(),
@@ -241,24 +241,25 @@ fn run_entry(entry: &Value) -> Value {
         expected_boundary,
         expected_update.as_deref(),
     ) {
-        return reject(e.to_string());
-    }
+        Ok(o) => o,
+        Err(e) => return reject(e.to_string()),
+    };
 
-    // COST IS NOT REPORTABLE from this path any more, so we emit null rather
-    // than a fabricated number. enr discards it deliberately inside the
-    // validator ("Cost discarded, not unchecked — the maxBlockCost gate runs
-    // inside evaluate_scripts", validation/src/digest.rs), and the only inputs
-    // that could recompute it (`ScriptEvalInputs.proof_boxes`) are AVL-extracted
-    // during the state replay and never surface. Rebuilding them here would be
-    // exactly the parallel reimplementation this runner exists to avoid.
+    // Cost comes straight off the outcome (enr PR #19, `block_cost: Option<u64>`)
+    // — the Σ per-tx cost the validator already computed and gate-checked inside
+    // `evaluate_scripts`. The runner reports the node's number; it never
+    // recomputes one, which would mean rebuilding `ScriptEvalInputs.proof_boxes`
+    // from the AVL replay and grading our own reimplementation.
     //
-    // Grading degrades cleanly: santa-check's grade_block only grades cost when
-    // BOTH sides declare it non-null, so a null actual scores "n/a", never coal
-    // — an honest coverage gap, not a false divergence. Restoring the dimension
-    // needs enr to surface the cost on ApplyStateOutcome.
+    // `None` is legitimate, not a gap: enr skips evaluation for blocks at or
+    // below `checkpoint_height`, and serde renders that as JSON null. donner
+    // constructs its validator with checkpoint = 0 and every vector is height
+    // ≥ 1, so it should always be `Some` here — but the arm is honest rather
+    // than unwrapped, and santa-check grades cost only when both sides declare
+    // it, so a null would score "n/a" rather than coal.
     let post_digest = hex::encode(<[u8; 33]>::from(validator.current_digest().clone()));
     json!({
-        "valid": true, "post_digest": post_digest, "cost": null, "error": null,
+        "valid": true, "post_digest": post_digest, "cost": outcome.block_cost, "error": null,
     })
 }
 
