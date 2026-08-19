@@ -15,6 +15,7 @@
 //! `expected` is never read — the runner decides, SANTA grades.
 
 mod chain_tier;
+mod nipopow;
 
 use std::collections::BTreeMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -79,30 +80,34 @@ fn main() -> ExitCode {
 fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
     let mut results = BTreeMap::new();
 
-    let (schema, entries) = match std::fs::read_to_string(path)
+    let vector = match std::fs::read_to_string(path)
         .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string()))
     {
-        Ok(v) => {
-            let schema = v
-                .get("schema")
-                .and_then(Value::as_str)
-                .unwrap_or("santa-block/v1")
-                .to_owned();
-            match v.get("entries").and_then(Value::as_array) {
-                Some(arr) => (schema, arr.clone()),
-                None => {
-                    eprintln!("{}: no entries[] — emitting empty actuals", path.display());
-                    return results;
-                }
-            }
-        }
+        Ok(v) => v,
         Err(e) => {
             eprintln!("{}: unreadable vector file: {e}", path.display());
             return results;
         }
     };
+    let schema = vector
+        .get("schema")
+        .and_then(Value::as_str)
+        .unwrap_or("santa-block/v1");
+    let entries = match vector.get("entries").and_then(Value::as_array) {
+        Some(arr) => arr,
+        None => {
+            eprintln!("{}: no entries[] — emitting empty actuals", path.display());
+            return results;
+        }
+    };
     let is_chain = schema.starts_with("santa-chain/");
+    let is_nipopow = schema.starts_with("santa-nipopow/");
+    let chain_json = if is_nipopow {
+        vector.get("chain").and_then(Value::as_array)
+    } else {
+        None
+    };
 
     for (idx, entry) in entries.iter().enumerate() {
         let name = entry
@@ -117,6 +122,19 @@ fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
         let actuals = catch_unwind(AssertUnwindSafe(|| {
             if is_chain {
                 chain_tier::run_chain_entry(entry)
+            } else if is_nipopow {
+                let chain = chain_json.expect("nipopow vector missing chain");
+                let kind = entry["kind"].as_str().unwrap_or("");
+                match kind {
+                    "nipopow_interlinks" => nipopow::run_interlinks(chain),
+                    "nipopow_prove" => {
+                        let m = entry["payload"]["m"].as_u64().expect("missing m") as u32;
+                        let k = entry["payload"]["k"].as_u64().expect("missing k") as u32;
+                        let hid = entry["payload"]["headerId"].as_str();
+                        nipopow::run_prove(chain, m, k, hid)
+                    }
+                    _ => json!({"error": "not-implemented"}),
+                }
             } else {
                 run_entry(entry)
             }
@@ -127,18 +145,7 @@ fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
                     .cloned()
                     .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
                     .unwrap_or_else(|| "panic payload not a string".to_string());
-                if is_chain {
-                    json!({
-                        "nbits": null, "parameters": null, "activated_update": null,
-                        "valid": null,
-                        "error": "panicked", "note": note,
-                    })
-                } else {
-                    json!({
-                        "valid": null, "post_digest": null, "cost": null,
-                        "error": "panicked", "note": note,
-                    })
-                }
+                json!({ "error": "panicked", "note": note })
             });
         results.insert(name, actuals);
     }

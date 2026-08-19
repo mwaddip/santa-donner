@@ -20,6 +20,10 @@ ergo-validation = { path = "enr-impl/validation", features = ["json"] }
 # parallel reimplementation.
 enr-chain = { path = "enr-impl/chain" }
 ergo-mining = { path = "enr-impl/mining" }
+# NiPoPoW prover API — same rev as enr's own sigma-rust pin, not a new pin.
+ergo-nipopow = { git = "https://github.com/mwaddip/sigma-rust.git", rev = "f76db922" }
+ergo-chain-types = { git = "https://github.com/mwaddip/sigma-rust.git", rev = "f76db922" }
+sigma-ser = { git = "https://github.com/mwaddip/sigma-rust.git", rev = "f76db922" }
 
 # For the dump-avl-tree binary (reads state.redb directly)
 enr-state = { path = "enr-impl/state" }
