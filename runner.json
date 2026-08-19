@@ -2,7 +2,7 @@
   "name": "donner",
   "label": "donner (ergo-node-rust · enr digest validation)",
   "version": "v6",
-  "tiers": ["block", "chain"],
+  "tiers": ["block", "chain", "nipopow"],
   "cost": true,
   "impl": "https://github.com/mwaddip/ergo-node-rust.git#main"
 }
