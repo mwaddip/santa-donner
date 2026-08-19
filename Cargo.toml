@@ -20,10 +20,27 @@ ergo-validation = { path = "enr-impl/validation", features = ["json"] }
 # parallel reimplementation.
 enr-chain = { path = "enr-impl/chain" }
 ergo-mining = { path = "enr-impl/mining" }
-# NiPoPoW prover API — same rev as enr's own sigma-rust pin, not a new pin.
+# ── DERIVED, NOT HAND-MAINTAINED (same discipline as the patch table below) ──
+#
+# The nipopow tier needs sigma-rust's raw prover API (NipopowAlgos::prove /
+# ::update_interlinks / PoPowHeader), which enr-chain does NOT re-export — it
+# re-exports only the high-level build_nipopow_proof / verify_nipopow_proof_bytes
+# wrappers. So donner must name ergo-nipopow directly, and ergo-chain-types +
+# sigma-ser with it for the types that API takes and returns.
+#
+# A hand-written rev here would reintroduce exactly the drift this runner was
+# burned by twice: donner's whole premise is that there is ONE sigma-rust in the
+# build graph — enr's. A rev that agrees today diverges the moment enr bumps,
+# and cargo would then resolve TWO sigma-rusts whose types are mutually
+# incompatible. So `santa-run` REWRITES the rev below from the staged enr's own
+# manifest on every run, and fails the run if enr's sigma-rust pin cannot be
+# resolved or is not unanimous. Do not hand-edit between the markers; the
+# committed value is only a snapshot so a direct `cargo build` still works.
+# >>> DERIVED-SIGMA-RUST-REV >>>
 ergo-nipopow = { git = "https://github.com/mwaddip/sigma-rust.git", rev = "f76db922" }
 ergo-chain-types = { git = "https://github.com/mwaddip/sigma-rust.git", rev = "f76db922" }
 sigma-ser = { git = "https://github.com/mwaddip/sigma-rust.git", rev = "f76db922" }
+# <<< DERIVED-SIGMA-RUST-REV <<<
 
 # For the dump-avl-tree binary (reads state.redb directly)
 enr-state = { path = "enr-impl/state" }

@@ -24,8 +24,8 @@ use std::process::ExitCode;
 
 use enr_chain::{ADDigest, Header};
 use ergo_validation::{
-    evaluate_scripts, serialize_ad_proofs, serialize_block_transactions, serialize_extension,
-    BlockValidator, DigestValidator, Parameter, Parameters, Transaction,
+    serialize_ad_proofs, serialize_block_transactions, serialize_extension, BlockValidator,
+    DigestValidator, Parameter, Parameters, Transaction,
 };
 use serde_json::{json, Value};
 
@@ -223,7 +223,15 @@ fn run_entry(entry: &Value) -> Value {
     let mut validator =
         DigestValidator::from_state(input.parent_digest, input.header.height - 1, 0);
 
-    let outcome = match validator.apply_state(
+    // enr folded script evaluation INTO apply_state (its `BlockValidator` doc:
+    // "parse sections, compute state changes, apply AVL operations, verify
+    // digest, evaluate scripts, persist — in that order. After Ok … the block's
+    // scripts have been evaluated and passed … there is nothing left owed").
+    // `ApplyStateOutcome` no longer carries a `deferred_eval` bundle for the
+    // caller to run — the bundle "never leaves the stack frame that built it".
+    // So an Ok here already means the scripts passed; the reject arm below is
+    // the only verdict branch left.
+    if let Err(e) = validator.apply_state(
         &input.header,
         &input.txs_section,
         input.proofs_section.as_deref(),
@@ -233,22 +241,24 @@ fn run_entry(entry: &Value) -> Value {
         expected_boundary,
         expected_update.as_deref(),
     ) {
-        Ok(o) => o,
-        Err(e) => return reject(e.to_string()),
-    };
+        return reject(e.to_string());
+    }
 
-    let cost = match outcome.deferred_eval {
-        Some(eval) => match evaluate_scripts(&eval) {
-            Ok(c) => c,
-            Err(e) => return reject(e.to_string()),
-        },
-        // checkpoint = 0, height ≥ 1 — unreachable, but the arm must exist.
-        None => 0,
-    };
-
+    // COST IS NOT REPORTABLE from this path any more, so we emit null rather
+    // than a fabricated number. enr discards it deliberately inside the
+    // validator ("Cost discarded, not unchecked — the maxBlockCost gate runs
+    // inside evaluate_scripts", validation/src/digest.rs), and the only inputs
+    // that could recompute it (`ScriptEvalInputs.proof_boxes`) are AVL-extracted
+    // during the state replay and never surface. Rebuilding them here would be
+    // exactly the parallel reimplementation this runner exists to avoid.
+    //
+    // Grading degrades cleanly: santa-check's grade_block only grades cost when
+    // BOTH sides declare it non-null, so a null actual scores "n/a", never coal
+    // — an honest coverage gap, not a false divergence. Restoring the dimension
+    // needs enr to surface the cost on ApplyStateOutcome.
     let post_digest = hex::encode(<[u8; 33]>::from(validator.current_digest().clone()));
     json!({
-        "valid": true, "post_digest": post_digest, "cost": cost, "error": null,
+        "valid": true, "post_digest": post_digest, "cost": null, "error": null,
     })
 }
 

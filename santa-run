@@ -107,5 +107,62 @@ derive_patch_table() {
 }
 derive_patch_table
 
+# ── derive the sigma-rust rev from the STAGED enr ─────────────────────────────
+#
+# donner names three sigma-rust crates directly (ergo-nipopow + the two type
+# crates its API needs) because enr-chain re-exports only the high-level nipopow
+# wrappers. Those direct deps must ride enr's OWN sigma-rust pin: if donner's rev
+# and enr's rev differ, cargo resolves two sigma-rusts and their `Header` /
+# `BlockId` types stop being the same type. Same failure shape as the patch
+# table — so the same treatment: derive it, and fail the run rather than build
+# against a guess.
+derive_sigma_rust_rev() {
+  local manifest="$here/enr-impl/Cargo.toml" out="$here/Cargo.toml"
+  [ -f "$manifest" ] || {
+    echo "santa-run: staged enr has no Cargo.toml at $manifest" >&2; exit 1; }
+
+  # Every sigma-rust rev enr pins, deduped. Unanimity is the invariant: enr
+  # itself would be broken with two, so a split here is a real finding, not
+  # something to paper over by picking one.
+  local -a revs
+  mapfile -t revs < <(grep -oE 'sigma-rust\.git"[^}]*rev[[:space:]]*=[[:space:]]*"[0-9a-f]+"' "$manifest" \
+    | grep -oE '"[0-9a-f]+"$' | tr -d '"' | sort -u)
+
+  (( ${#revs[@]} == 1 )) || {
+    echo "santa-run: expected exactly one sigma-rust rev in the staged enr, found ${#revs[@]}:" >&2
+    printf '  %s\n' "${revs[@]}" >&2
+    echo "  Refusing to build — donner must ride a single sigma-rust, enr's." >&2
+    exit 1; }
+  local rev="${revs[0]}"
+
+  grep -q '^# >>> DERIVED-SIGMA-RUST-REV >>>$' "$out" || {
+    echo "santa-run: Cargo.toml lost its DERIVED-SIGMA-RUST-REV markers — refusing to build." >&2
+    exit 1; }
+
+  # Rewrite only between the markers, and count-in == count-out (the guard that
+  # catches a silently-dropped dep the same way the patch table's does).
+  local tmp; tmp="$(mktemp)"
+  awk -v rev="$rev" '
+    /^# >>> DERIVED-SIGMA-RUST-REV >>>$/ { inblock = 1; print; next }
+    /^# <<< DERIVED-SIGMA-RUST-REV <<<$/ { inblock = 0; print; next }
+    inblock && /sigma-rust\.git/ {
+      sub(/rev[[:space:]]*=[[:space:]]*"[0-9a-f]+"/, "rev = \"" rev "\"")
+      n++
+    }
+    { print }
+    END { printf "%d\n", n > "/dev/stderr" }
+  ' "$out" > "$tmp" 2>"$tmp.count"
+
+  local rewrote; rewrote="$(cat "$tmp.count")"; rm -f "$tmp.count"
+  (( rewrote == 3 )) || {
+    echo "santa-run: rewrote $rewrote sigma-rust deps between the markers, expected 3." >&2
+    echo "  Refusing to build rather than leaving one on a stale rev." >&2
+    rm -f "$tmp"; exit 1; }
+
+  mv "$tmp" "$out"
+  echo "santa-run: derived sigma-rust rev $rev from staged enr (3 deps)" >&2
+}
+derive_sigma_rust_rev
+
 (cd "$here" && cargo build --release --quiet)
 "$here/target/release/donner-runner" "$VECTORS" "$OUT"
