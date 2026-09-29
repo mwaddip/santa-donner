@@ -36,8 +36,8 @@ fixes).
 
 ## Composition
 
-Per-entry: `enr_chain::verify_pow` (hdrPoW) → `ergo_mining::candidate::
-transactions_root` vs header (bsCorrespondsToHeader; the live node gets this
+Per-entry: `enr_chain::verify_pow` (hdrPoW) → `enr_chain::transactions_root`
+vs header (bsCorrespondsToHeader; the live node gets this
 binding from wire modifier-ids, which the runner bypasses) → fresh
 `DigestValidator::from_state(parent_digest, H-1, checkpoint=0)` +
 `apply_state` (proofs digest, state replay, params incl. version gate) →

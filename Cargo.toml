@@ -19,7 +19,6 @@ ergo-validation = { path = "enr-impl/validation", features = ["json"] }
 # using the node's own functions — the runner measures node code, never a
 # parallel reimplementation.
 enr-chain = { path = "enr-impl/chain" }
-ergo-mining = { path = "enr-impl/mining" }
 # ── DERIVED, NOT HAND-MAINTAINED (same discipline as the patch table below) ──
 #
 # The nipopow tier needs sigma-rust's raw prover API (NipopowAlgos::prove /

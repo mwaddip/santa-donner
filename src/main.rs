@@ -177,23 +177,20 @@ fn run_entry(entry: &Value) -> Value {
     // ---- verdict phase: errors below = the validator DECIDED invalid ----
     // Composition mirrors the node's layering + the JVM oracle recipe:
     // hdrPoW (chain/) → bsCorrespondsToHeader txroot (the wire binding,
-    // replayed via mining's Merkle fn) → apply_state (proofs digest, state
+    // replayed via enr_chain::transactions_root) → apply_state (proofs digest, state
     // replay, params) → script eval + block cost.
 
     if let Err(e) = enr_chain::verify_pow(&input.header) {
         return reject(format!("hdrPoW: {e}"));
     }
 
-    match ergo_mining::candidate::transactions_root(&input.transactions, input.header.version) {
-        Ok(root) if root == input.header.transaction_root => {}
-        Ok(root) => {
-            return reject(format!(
-                "bsCorrespondsToHeader: transactionsRoot {} != header {}",
-                hex::encode(root.0),
-                hex::encode(input.header.transaction_root.0),
-            ))
-        }
-        Err(e) => return reject(format!("bsCorrespondsToHeader: transactionsRoot: {e}")),
+    let root = enr_chain::transactions_root(&input.transactions, input.header.version);
+    if root != input.header.transaction_root.0 {
+        return reject(format!(
+            "bsCorrespondsToHeader: transactionsRoot {} != header {}",
+            hex::encode(root),
+            hex::encode(input.header.transaction_root.0),
+        ));
     }
 
     // Epoch-boundary expectations (JVM exBlockVersion + exMatchParameters).
@@ -298,7 +295,7 @@ fn decode_entry(entry: &Value) -> Result<EntryInput, String> {
     };
 
     let header: Header = {
-        let mut h = entry
+        let h = entry
             .get("block")
             .and_then(|b| b.get("header"))
             .cloned()
