@@ -228,11 +228,21 @@ fn run_entry(entry: &Value) -> Value {
     // caller to run — the bundle "never leaves the stack frame that built it".
     // So an Ok here already means the scripts passed; the reject arm below is
     // the only verdict branch left.
+    // `parent_extension` (enr `9c15411`) is the raw Extension of the block at
+    // `height − 1`, and it feeds ONLY the interlink rules 401/402. The block
+    // tier does not grade those: its oracle (rudolph's BlockEngine) models
+    // `execTransactions` plus the epoch-boundary `exBlockVersion` check and
+    // NO interlink rule, so a block vector carries no parent extension and
+    // the JVM side checks no interlinks.
+    // `None` is enr's own "unable to validate" path for a non-genesis block
+    // (a `warn!` and a skip, the JVM's `exIlUnableToValidate`) — the same
+    // scope as the oracle, stated here rather than left implicit.
     let outcome = match validator.apply_state(
         &input.header,
         &input.txs_section,
         input.proofs_section.as_deref(),
         &input.ext_section,
+        None,
         &input.preceding_headers,
         &input.parameters,
         expected_boundary,
@@ -329,7 +339,7 @@ fn decode_entry(entry: &Value) -> Result<EntryInput, String> {
     )
     .map_err(|e| format!("transactions decode: {e}"))?;
     let txs_section =
-        serialize_block_transactions(&header_id, header.version as u32, &transactions)
+        serialize_block_transactions(&header_id, header.version, &transactions)
             .map_err(|e| format!("blockTransactions serialize: {e}"))?;
 
     // proofBytes: null or absent means proofless block (consensus reject).
