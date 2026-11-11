@@ -36,7 +36,9 @@ fixes).
 
 ## Composition
 
-Per-entry: `enr_chain::verify_pow` (hdrPoW) → `enr_chain::transactions_root`
+Per-entry: `enr_chain::verify_pow` (hdrPoW) → `parse_block_transactions` over the
+vector's section bytes, which are handed to enr verbatim (never rebuilt through a
+writer, which would re-write an as-received tree) → `enr_chain::transactions_root`
 vs header (bsCorrespondsToHeader; the live node gets this
 binding from wire modifier-ids, which the runner bypasses) → fresh
 `DigestValidator::from_state(parent_digest, H-1, checkpoint=0)` +

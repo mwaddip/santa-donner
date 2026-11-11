@@ -24,8 +24,8 @@ use std::process::ExitCode;
 
 use enr_chain::{ADDigest, Header};
 use ergo_validation::{
-    serialize_ad_proofs, serialize_block_transactions, serialize_extension, BlockValidator,
-    DigestValidator, Parameter, Parameters, Transaction,
+    parse_block_transactions, serialize_ad_proofs, serialize_extension, BlockValidator,
+    DigestValidator, Parameter, Parameters,
 };
 use serde_json::{json, Value};
 
@@ -184,7 +184,14 @@ fn run_entry(entry: &Value) -> Value {
         return reject(format!("hdrPoW: {e}"));
     }
 
-    let root = enr_chain::transactions_root(&input.transactions, input.header.version);
+    // The section is the bytes a node receives (runner-contract-block §2), so it is
+    // parsed here, in the verdict phase: a section a node cannot parse is a block it
+    // rejects. apply_state parses the same bytes again below.
+    let transactions = match parse_block_transactions(&input.txs_section) {
+        Ok(parsed) => parsed.transactions,
+        Err(e) => return reject(format!("blockTransactions parse: {e}")),
+    };
+    let root = enr_chain::transactions_root(&transactions, input.header.version);
     if root != input.header.transaction_root.0 {
         return reject(format!(
             "bsCorrespondsToHeader: transactionsRoot {} != header {}",
@@ -275,7 +282,6 @@ struct EntryInput {
     header: Header,
     preceding_headers: Vec<Header>,
     parameters: Parameters,
-    transactions: Vec<Transaction>,
     txs_section: Vec<u8>,
     proofs_section: Option<Vec<u8>>,
     ext_section: Vec<u8>,
@@ -330,17 +336,18 @@ fn decode_entry(entry: &Value) -> Result<EntryInput, String> {
     let header_id: [u8; 32] = header.id.0 .0;
     let block = entry.get("block").ok_or("block missing")?;
 
-    let transactions: Vec<Transaction> = serde_json::from_value(
+    // The transactions section's BYTES, as received (runner-contract-block §2) — handed
+    // to enr verbatim. Until 2026-11-11 the vector carried node-API JSON, which this
+    // runner rebuilt through sigma-rust's writer; the writer re-writes every tree, so a
+    // tree that arrived non-canonically reached enr re-encoded, and the three
+    // as-received rows of kept-tree-bytes-in-block went red for this runner's reason.
+    let txs_section = hex::decode(
         block
             .get("blockTransactions")
-            .and_then(|bt| bt.get("transactions"))
-            .cloned()
-            .ok_or("block.blockTransactions.transactions missing")?,
+            .and_then(Value::as_str)
+            .ok_or("block.blockTransactions missing or not the section's hex")?,
     )
-    .map_err(|e| format!("transactions decode: {e}"))?;
-    let txs_section =
-        serialize_block_transactions(&header_id, header.version, &transactions)
-            .map_err(|e| format!("blockTransactions serialize: {e}"))?;
+    .map_err(|e| format!("blockTransactions hex: {e}"))?;
 
     // proofBytes: null or absent means proofless block (consensus reject).
     let proof_bytes_opt: Option<Vec<u8>> =
@@ -378,7 +385,6 @@ fn decode_entry(entry: &Value) -> Result<EntryInput, String> {
         header,
         preceding_headers,
         parameters,
-        transactions,
         txs_section,
         proofs_section,
         ext_section,
