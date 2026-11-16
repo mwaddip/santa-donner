@@ -165,4 +165,4 @@ derive_sigma_rust_rev() {
 derive_sigma_rust_rev
 
 (cd "$here" && cargo build --release --quiet)
-"$here/target/release/donner-runner" "$VECTORS" "$OUT"
+${SANTA_BOUND:+"$SANTA_BOUND"} "$here/target/release/donner-runner" "$VECTORS" "$OUT"
