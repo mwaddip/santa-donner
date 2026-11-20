@@ -28,9 +28,10 @@ pub fn run_chain_entry(entry: &Value) -> Value {
     }
 }
 
-fn errored(reason: String) -> Value {
+/// The chain tier's diagnostic on `errored` is `note` (runner-contract-chain §3).
+fn errored(note: String) -> Value {
     json!({ "nbits": null, "parameters": null, "activated_update": null,
-            "valid": null, "error": "errored", "reason": reason })
+            "valid": null, "error": "errored", "note": note })
 }
 
 fn not_implemented(_note: String) -> Value {
@@ -313,4 +314,19 @@ fn parameter_to_id(p: &Parameter) -> Option<i32> {
         Parameter::SoftForkStartingHeight => 122,
         Parameter::BlockVersion => 123,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    /// The chain tier's diagnostic on an `errored` entry is `note` (runner-contract-chain §3; the chain actuals schema
+    /// has no `reason`, so a `reason` fails it and never reaches the scoreboard).
+    #[test]
+    fn an_errored_entry_carries_its_diagnostic_as_note() {
+        let e = super::run_chain_entry(&json!({"name": "x#0"}));
+        assert_eq!(e["error"], "errored");
+        assert_eq!(e["note"], "entry has no kind");
+        assert!(e.get("reason").is_none(), "{e}");
+    }
 }
