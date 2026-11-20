@@ -90,10 +90,13 @@ fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
             return results;
         }
     };
-    let schema = vector
-        .get("schema")
-        .and_then(Value::as_str)
-        .unwrap_or("santa-block/v1");
+    // Only the schemas this runner was written for, by exact name and version. Any other (a newer version of one of
+    // them, a tier it does not mount, or none) is not-implemented for every entry, never read as a known schema
+    // (runner-integration §3).
+    let schema = vector.get("schema").and_then(Value::as_str);
+    let is_block = schema == Some("santa-block/v1");
+    let is_chain = schema == Some("santa-chain/v1");
+    let is_nipopow = schema == Some("santa-nipopow/v1");
     let entries = match vector.get("entries").and_then(Value::as_array) {
         Some(arr) => arr,
         None => {
@@ -101,8 +104,6 @@ fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
             return results;
         }
     };
-    let is_chain = schema.starts_with("santa-chain/");
-    let is_nipopow = schema.starts_with("santa-nipopow/");
     let chain_json = if is_nipopow {
         vector.get("chain").and_then(Value::as_array)
     } else {
@@ -115,6 +116,10 @@ fn run_vector_file(path: &Path) -> BTreeMap<String, Value> {
             .and_then(Value::as_str)
             .map(str::to_owned)
             .unwrap_or_else(|| format!("entry-{idx}"));
+        if !(is_block || is_chain || is_nipopow) {
+            results.insert(name, json!({ "error": "not-implemented" }));
+            continue;
+        }
 
         // Per-entry panic boundary: one entry never aborts the file. Rayon
         // (inside evaluate_scripts) resumes worker panics at the join point,
@@ -434,4 +439,30 @@ fn parameter_from_id(id: i32) -> Option<Parameter> {
         123 => Parameter::BlockVersion,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    /// A schema the runner was not written for (a newer version of one it knows, a tier it does not mount, or none)
+    /// answers the tier-neutral `{"error": "not-implemented"}` for every entry, and is never read as a known schema:
+    /// a new envelope read as an old one shows as false divergences (runner-integration §3).
+    #[test]
+    fn an_unknown_schema_is_not_implemented() {
+        for schema in [Some("santa-block/v2"), Some("santa-chain/v2"), Some("santa-eval/v1"), None] {
+            // entries a known arm would happily read (a chain kind; a block entry's absent material)
+            let mut vector = json!({"entries": [{"name": "e#0", "kind": "retargeting"}, {"name": "e#1"}]});
+            if let Some(s) = schema {
+                vector["schema"] = json!(s);
+            }
+            let path = std::env::temp_dir().join(format!("donner-unknown-schema-{}.json", std::process::id()));
+            std::fs::write(&path, vector.to_string()).expect("write test vector");
+            let results = super::run_vector_file(&path);
+            assert_eq!(results.len(), 2, "{schema:?}");
+            for (name, actual) in &results {
+                assert_eq!(actual, &json!({"error": "not-implemented"}), "{schema:?} {name}");
+            }
+        }
+    }
 }
