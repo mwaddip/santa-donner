@@ -391,6 +391,7 @@ dependencies = [
  "ergo_avltree_rust",
  "hex",
  "redb",
+ "santa-harness",
  "serde_json",
 ]
 
@@ -1284,6 +1285,14 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "windows-sys",
+]
+
+[[package]]
+name = "santa-harness"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
 ]
 
 [[package]]
