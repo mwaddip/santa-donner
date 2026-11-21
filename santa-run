@@ -32,7 +32,7 @@ fi
 # --- toolchain (rust) now on PATH ---
 impl="$(cd "$1" && pwd)"
 SANTA="$(realpath "$2")"
-OUT="$(realpath -m "$3")"; mkdir -p "$OUT"
+OUT="$(realpath -m "$3")"   # the runner makes it, after it has checked the out-dir is allowed (§3)
 # conform clones runner.json's impl (<url>#<ref>) into $1/<repo-basename> and
 # hands the CONTAINING dir as $1 (dasher's $impl/ergots precedent). Direct
 # local runs may pass the enr checkout's parent the same way.
