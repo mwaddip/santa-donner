@@ -5,9 +5,11 @@
 //! height-1, checkpoint=0)`, `apply_state` over wire-serialized sections,
 //! then `evaluate_scripts` for the verdict + block-accumulated cost.
 //!
-//! Invocation (by santa-run): `donner-runner <vectors-dir> <out-dir>`.
-//! For each `*.json` vector file, writes `<out-dir>/<same-filename>` with
-//! `{ "<entry-name>": <actuals>, ... }`.
+//! Invocation (by santa-run): `donner-runner run <runner.json> <santa-dir> <out-dir>`, the self-contained runner
+//! (SANTA's runner-integration §3) through the harness (`harness/`): it checks its grading interpreter and
+//! selection against the SANTA checkout's oracles, selects by runner.json's scope, runs each selected file (a
+//! bounded one as `donner-runner one <santa-dir> <relpath> <out-file>` in a child under its budget), grades by
+//! SANTA's grading rules and writes results.json and actuals/.
 //!
 //! Totality: the runner never aborts on an entry. A clean rejection is a
 //! verdict (`valid: false, error: null`); a decode/setup failure is
@@ -29,49 +31,29 @@ use ergo_validation::{
 };
 use serde_json::{json, Value};
 
+/// The harness's runner function: one vector file → its actuals by entry name.
+fn run_file(path: &Path, _doc: &Value) -> BTreeMap<String, Value> {
+    run_vector_file(path)
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 3 {
-        eprintln!("usage: donner-runner <vectors-dir> <out-dir>");
-        return ExitCode::FAILURE;
-    }
-    let vectors_dir = Path::new(&args[1]);
-    let out_dir = Path::new(&args[2]);
-
-    let mut entries: Vec<_> = match std::fs::read_dir(vectors_dir) {
-        Ok(rd) => rd
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "json"))
-            .collect(),
-        Err(e) => {
-            eprintln!("cannot read vectors dir {}: {e}", vectors_dir.display());
-            return ExitCode::FAILURE;
+    let r = match args.get(1).map(String::as_str) {
+        Some("run") if args.len() == 5 => {
+            santa_harness::main_run(Path::new(&args[2]), Path::new(&args[3]), Path::new(&args[4]), &run_file)
+        }
+        Some("one") if args.len() == 5 => santa_harness::main_one(Path::new(&args[2]), &args[3], Path::new(&args[4]), &run_file),
+        _ => {
+            eprintln!("usage:\n  donner-runner run <runner.json> <santa-dir> <out-dir>\n  donner-runner one <santa-dir> <relpath> <out-file>");
+            return ExitCode::from(2);
         }
     };
-    entries.sort();
-
-    let mut hard_failures = 0u32;
-    for path in entries {
-        let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let results = run_vector_file(&path);
-        let out_path = out_dir.join(&file_name);
-        match serde_json::to_string_pretty(&results)
-            .map_err(|e| e.to_string())
-            .and_then(|s| std::fs::write(&out_path, s).map_err(|e| e.to_string()))
-        {
-            Ok(()) => eprintln!("{}: {} entries", file_name, results.len()),
-            Err(e) => {
-                eprintln!("cannot write {}: {e}", out_path.display());
-                hard_failures += 1;
-            }
+    match r {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("donner-runner: {e}");
+            ExitCode::FAILURE
         }
-    }
-
-    if hard_failures > 0 {
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
     }
 }
 

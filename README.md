@@ -16,7 +16,10 @@ SANTA mounts this repo as a git submodule at `runners/donner`.
 ## Shape (per spec §1)
 
 - `runner.json` — capability manifest (`tiers: ["block"]`)
-- `santa-run` — entry script: `santa-run <impl-path> <vectors-dir> <out-dir>`
+- `santa-run` — entry script: `santa-run <impl-path> <santa-dir> <out-dir>`, the self-contained runner: `donner-runner
+  run` checks against the SANTA checkout's oracles, selects by `runner.json`, runs, grades and writes `results.json` and
+  `actuals/` through `harness/` (copied from santa-blitzen; `SANTA_DIR=<santa> cargo test --manifest-path
+  harness/Cargo.toml` runs its tests)
 - `mise.toml` — self-provisioning toolchain
 - runner crate — path-deps enr's `validation` crate
 
@@ -24,7 +27,7 @@ SANTA mounts this repo as a git submodule at `runners/donner`.
 
 Implemented 2026-06-10, `cost: true`. Full board against the committed
 vectors at santa `2f3dbdd`: captured 3/3 (valid + post_digest + cost),
-authored 6/6 — run via `./santa-run <enr-checkout> <vectors-dir> <out-dir>`.
+authored 6/6 — run via `./santa-run <enr-checkout> <santa-dir> <out-dir>`.
 
 Building donner surfaced (and enr fixed, same day): the missing block-level
 maxBlockCost sum check, the missing `exBlockVersion` gate, and a v1-only

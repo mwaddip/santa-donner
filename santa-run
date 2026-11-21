@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# santa-run <impl-path> <vectors-dir> <out-dir>  — Donner (ergo-node-rust, enr digest validation).
+# santa-run <impl-path> <santa-dir> <out-dir>  — Donner (ergo-node-rust, enr digest validation), the self-contained
+# runner (SANTA's runner-integration §3): `donner-runner run` selects, runs, bounds, grades and writes results.json.
 #
 # impl-path ($1) is the ergo-node-rust checkout; the runner crate path-deps
 # enr's validation crate through the enr-impl symlink (the dasher pattern:
@@ -27,7 +28,7 @@ if [ -z "${SANTA_MISE_ACTIVE:-}" ]; then
 fi
 # --- toolchain (rust) now on PATH ---
 impl="$(cd "$1" && pwd)"
-VECTORS="$(realpath "$2")"
+SANTA="$(realpath "$2")"
 OUT="$(realpath -m "$3")"; mkdir -p "$OUT"
 # conform clones runner.json's impl (<url>#<ref>) into $1/<repo-basename> and
 # hands the CONTAINING dir as $1 (dasher's $impl/ergots precedent). Direct
@@ -165,4 +166,4 @@ derive_sigma_rust_rev() {
 derive_sigma_rust_rev
 
 (cd "$here" && cargo build --release --quiet)
-${SANTA_BOUND:+"$SANTA_BOUND"} "$here/target/release/donner-runner" "$VECTORS" "$OUT"
+"$here/target/release/donner-runner" run "$here/runner.json" "$SANTA" "$OUT"
