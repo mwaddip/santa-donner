@@ -83,6 +83,35 @@ pub fn run_prove(chain_json: &[Value], m: u32, k: u32, header_id: Option<&str>) 
 
     let algos = NipopowAlgos::default();
     let proof = algos.prove(&chain, k, m).expect("prove failed");
-    let proof_bytes = proof.scorex_serialize_bytes().expect("serialize");
+    // `proofHex` is ergo's `NipopowProofSerializer.toBytes`, which ends with the proof's `continuous` flag
+    // (`NipopowProof.scala:208`). The flag is not computed by the prover: it encodes an input, and this tier fixes it
+    // at `continuous = false` (runner-contract-nipopow §2, §5). sigma-rust's `NipopowProof` has no field for it, so
+    // the runner writes the 0 — as the blitzen runners have since santa-blitzen `6ba7773` (2026-09-30).
+    let mut proof_bytes = proof.scorex_serialize_bytes().expect("serialize");
+    proof_bytes.push(0);
     json!({ "proofHex": bytes_to_hex(&proof_bytes), "error": null })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SANTA's `NipopowProve.jvm-chain-32` (copied into `tests/fixtures/`): every prove entry answers the reference's
+    /// `proofHex`, byte for byte, its final `continuous` byte included.
+    #[test]
+    fn prove_entries_answer_the_reference_bytes() {
+        let doc: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/nipopow-chain-32.json")).expect("fixture");
+        let chain = doc["chain"].as_array().expect("chain");
+        let mut n = 0;
+        for e in doc["entries"].as_array().expect("entries").iter().filter(|e| e["kind"] == "nipopow_prove") {
+            let p = &e["payload"];
+            let got = run_prove(chain, p["m"].as_u64().unwrap() as u32, p["k"].as_u64().unwrap() as u32,
+                p["headerId"].as_str());
+            assert_eq!(got["proofHex"], e["expected"]["proofHex"], "{}", e["name"]);
+            n += 1;
+        }
+        assert_eq!(n, 4, "the fixture's four prove entries");
+    }
 }
